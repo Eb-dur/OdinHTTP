@@ -1,0 +1,4 @@
+*Handle different requests
+*Handle headers
+*Send different responses
+*Customizable endpoints
