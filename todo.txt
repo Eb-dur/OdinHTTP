@@ -1,5 +1,5 @@
 *Handle different requests
-*Handle headers
+*Handle headers - done
 *Send different responses
 *Customizable endpoints
 *research multi threadding

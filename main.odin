@@ -3,6 +3,8 @@ package main
 import "core:fmt"
 import "core:net"
 import "core:strings"
+import "core:encoding/json"
+import "core:os"
 
 DEBUG :: false
 IP :: "127.0.0.1:4040"
@@ -12,6 +14,11 @@ request_type :: enum {
     PUT,
 }
 
+return_type :: enum {
+    TEXTPLAIN,
+    HTML,
+}
+
 HTTP_request :: struct {
     request_type : request_type,
     route : string,
@@ -19,21 +26,35 @@ HTTP_request :: struct {
     body : string, // May be needed
 }
 
+parse_routes :: proc(routing_map : ^map[string]string) {
+    file_content, success := os.read_entire_file_from_filename("routings.json")
+
+    if !success {
+        fmt.print("Failed to read routings.json")
+        return
+    }
+
+    if !(json.unmarshal(file_content, routing_map) == nil){
+        fmt.print("Failed to unmarshal JSON")
+    }
+}
+
 read_request :: proc(buffer : []byte) -> (^HTTP_request, bool) {
     if DEBUG do fmt.println("This request was recieved ", string(buffer))
-    
-    request : ^HTTP_request
 
+    request : ^HTTP_request
     request = new(HTTP_request)
     request_string := string(buffer)
 
     split_request, err := strings.split(request_string,"\r\n")
+    defer delete(split_request)
     if err != nil{
         fmt.println("Error in memory assignment")
     }
     // Get type
     http_formalia := split_request[0]
     http_formalia_split, err2 := strings.split(http_formalia, " ")
+    defer delete(http_formalia_split)
     if err2 != nil{
         fmt.println("Error in memory assignment")
     }
@@ -49,7 +70,7 @@ read_request :: proc(buffer : []byte) -> (^HTTP_request, bool) {
     // Get route
     request.route = strings.clone(http_formalia_split[1])
     // Formalia done
-    delete(http_formalia_split)
+
   
     // Get headers
     for header_index : int = 3 ; split_request[header_index] == ""; header_index += 1 {
@@ -58,23 +79,31 @@ read_request :: proc(buffer : []byte) -> (^HTTP_request, bool) {
         delete(split_string)
     }
     // Get body
-    request.body = split_request[len(split_request) - 1]
-    delete(split_request)
+    request.body = strings.clone(split_request[len(split_request) - 1])
 
     return request, true
 }
 
+generate_response :: proc(code : int = 200, ) -> []u8
+
 main :: proc() {
     using net
     endpoint, ok := parse_endpoint(IP)
+    routings := make(map[string]string)
+    defer delete(routings)
+    parse_routes(&routings)
+
+    if DEBUG do fmt.println(routings)
 
     sock, err:= listen_tcp(endpoint,10)
     if err != nil {
         fmt.println("Failed to create socket")
         return
     }
+
+
     fmt.println("Socket is up and running on", IP, "waiting for connections")
-    buffer := make([]byte, 1024)
+    buffer : [1024]byte
     for {
         client_sock, client_endpoint, errc := accept_tcp(sock)
         if errc != nil{
@@ -83,7 +112,7 @@ main :: proc() {
         }
         fmt.println("Accepted connection from ", client_endpoint)
         bytes_read : int
-        bytes_read ,_  = recv_tcp(client_sock, buffer)
+        bytes_read ,_  = recv_tcp(client_sock, buffer[:])
         parsed, _ := read_request(buffer[:bytes_read])
         fmt.println("Request:", parsed.request_type,parsed.route, parsed.headers, parsed.body)
         response := transmute([]u8)string("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nHello, world!")
@@ -91,6 +120,6 @@ main :: proc() {
         fmt.println("response sent, wrote", written, "bytes")
         close(client_sock)
     }
-    delete(buffer)
+
 
 }
