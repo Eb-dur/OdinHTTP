@@ -15,8 +15,17 @@ request_type :: enum {
 }
 
 return_type :: enum {
-    TEXTPLAIN,
+    PLAIN,
     HTML,
+    JSON,
+    CSS,
+    JAVASCRIPT,
+    MARKDOWN,
+    XML,
+    PNG,
+    JPEG,
+    BINARY,
+    OGG,
 }
 
 HTTP_request :: struct {
@@ -84,7 +93,7 @@ read_request :: proc(buffer : []byte) -> (^HTTP_request, bool) {
     return request, true
 }
 
-generate_response :: proc(code : int = 200, return_type : return_type = nil, data : []u8 = nil) -> [dynamic]u8 {
+generate_response :: proc(code : int = 200, return_type_wanted : return_type = nil, data : []u8 = nil) -> [dynamic]u8 {
     text : strings.Builder
     response : []u8
     reason_phrase := ""
@@ -121,17 +130,45 @@ generate_response :: proc(code : int = 200, return_type : return_type = nil, dat
         reason_phrase = " Unknown Status"
     }
 
-   strings.write_string(&text, "HTTP/1.1 ")
-   strings.write_int(&text, code)
-   strings.write_string(&text,reason_phrase)
-   strings.write_string(&text, "\r\n")
+    strings.write_string(&text, "HTTP/1.1 ")
+    strings.write_int(&text, code)
+    strings.write_string(&text,reason_phrase)
+    strings.write_string(&text, "\r\n")
 
-   //Here we do content type
-
+    //Here we do content type
+    
+    strings.write_string(&text, "Content-Type: ")
+    switch return_type_wanted {
+    case return_type.OGG:
+        strings.write_string(&text, "audio/ogg")
+    case return_type.HTML:
+        strings.write_string(&text, "text/html")
+    case return_type.JSON:
+        strings.write_string(&text, "application/json")
+    case return_type.XML:
+        strings.write_string(&text, "text/xml")
+    case return_type.PNG:
+        strings.write_string(&text, "image/png")
+    case return_type.JPEG:
+        strings.write_string(&text, "image/jpeg")
+    case return_type.BINARY:
+        strings.write_string(&text, "application/octet-stream")
+    case return_type.CSS:
+        strings.write_string(&text, "text/css")
+    case return_type.JAVASCRIPT:
+        strings.write_string(&text, "text/javascript")
+    case return_type.MARKDOWN:
+        strings.write_string(&text, "text/markdown")
+    case return_type.PLAIN:
+        fallthrough
+    case:
+        strings.write_string(&text, "text/plain")
+}
    strings.write_string(&text, "\r\n")
 
    //Here we do len
-
+   strings.write_string(&text, "Content-Lenght: ")
+   strings.write_int(&text, len(data) if data != nil else 0)
    strings.write_string(&text, "\r\n")
    strings.write_string(&text, "\r\n")
 
@@ -163,17 +200,17 @@ main :: proc() {
     for {
         client_sock, client_endpoint, errc := accept_tcp(sock)
         if errc != nil{
-            fmt.println("Failed to accept connection")
+            if DEBUG do fmt.println("Failed to accept connection")
             continue
         }
-        fmt.println("Accepted connection from ", client_endpoint)
+        if DEBUG do fmt.println("Accepted connection from ", client_endpoint)
         bytes_read : int
         bytes_read ,_  = recv_tcp(client_sock, buffer[:])
         parsed, _ := read_request(buffer[:bytes_read])
-        fmt.println("Request:", parsed.request_type,parsed.route, parsed.headers, parsed.body)
+        if DEBUG do fmt.println("Request:", parsed.request_type,parsed.route, parsed.headers, parsed.body)
         response := generate_response()
         written, _ := send_tcp(client_sock, response[:])
-        fmt.println("response sent, wrote", written, "bytes")
+        if DEBUG do fmt.println("response sent, wrote", written, "bytes")
         delete(response)
         close(client_sock)
     }
