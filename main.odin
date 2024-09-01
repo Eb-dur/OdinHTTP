@@ -84,7 +84,64 @@ read_request :: proc(buffer : []byte) -> (^HTTP_request, bool) {
     return request, true
 }
 
-generate_response :: proc(code : int = 200, ) -> []u8
+generate_response :: proc(code : int = 200, return_type : return_type = nil, data : []u8 = nil) -> [dynamic]u8 {
+    text : strings.Builder
+    response : []u8
+    reason_phrase := ""
+    switch code {
+    case 200:
+        reason_phrase = " OK"
+    case 201:
+        reason_phrase = " Created"
+    case 202:
+        reason_phrase = " Accepted"
+    case 204:
+        reason_phrase = " No Content"
+    case 301:
+        reason_phrase = " Moved Permanently"
+    case 302:
+        reason_phrase = " Found"
+    case 304:
+        reason_phrase = " Not Modified"
+    case 400:
+        reason_phrase = " Bad Request"
+    case 401:
+        reason_phrase = " Unauthorized"
+    case 403:
+        reason_phrase = " Forbidden"
+    case 404:
+        reason_phrase = " Not Found"
+    case 500:
+        reason_phrase = " Internal Server Error"
+    case 502:
+        reason_phrase = " Bad Gateway"
+    case 503:
+        reason_phrase = " Service Unavailable"
+    case:
+        reason_phrase = " Unknown Status"
+    }
+
+   strings.write_string(&text, "HTTP/1.1 ")
+   strings.write_int(&text, code)
+   strings.write_string(&text,reason_phrase)
+   strings.write_string(&text, "\r\n")
+
+   //Here we do content type
+
+   strings.write_string(&text, "\r\n")
+
+   //Here we do len
+
+   strings.write_string(&text, "\r\n")
+   strings.write_string(&text, "\r\n")
+
+   //Here we do data
+
+   strings.write_bytes(&text, data)
+
+   return text.buf
+
+}
 
 main :: proc() {
     using net
@@ -101,7 +158,6 @@ main :: proc() {
         return
     }
 
-
     fmt.println("Socket is up and running on", IP, "waiting for connections")
     buffer : [1024]byte
     for {
@@ -115,9 +171,10 @@ main :: proc() {
         bytes_read ,_  = recv_tcp(client_sock, buffer[:])
         parsed, _ := read_request(buffer[:bytes_read])
         fmt.println("Request:", parsed.request_type,parsed.route, parsed.headers, parsed.body)
-        response := transmute([]u8)string("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nHello, world!")
-        written, _ := send_tcp(client_sock, response)
+        response := generate_response()
+        written, _ := send_tcp(client_sock, response[:])
         fmt.println("response sent, wrote", written, "bytes")
+        delete(response)
         close(client_sock)
     }
 
