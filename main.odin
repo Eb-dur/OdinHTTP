@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:net"
 import "core:strings"
 
+DEBUG :: false
 IP :: "127.0.0.1:4040"
 request_type :: enum {
     GET,
@@ -15,13 +16,13 @@ HTTP_request :: struct {
     request_type : request_type,
     route : string,
     headers : map[string]string,
-    body : map[string]string, // May be needed
+    body : string, // May be needed
 }
 
 read_request :: proc(buffer : []byte) -> (^HTTP_request, bool) {
-    fmt.println("This request was recieved ", string(buffer))
+    if DEBUG do fmt.println("This request was recieved ", string(buffer))
+    
     request : ^HTTP_request
-    workstring : string
 
     request = new(HTTP_request)
     request_string := string(buffer)
@@ -31,14 +32,13 @@ read_request :: proc(buffer : []byte) -> (^HTTP_request, bool) {
         fmt.println("Error in memory assignment")
     }
     // Get type
-    workstring = split_request[0]
-    request_split, err2 := strings.split(workstring, " ")
+    http_formalia := split_request[0]
+    http_formalia_split, err2 := strings.split(http_formalia, " ")
     if err2 != nil{
         fmt.println("Error in memory assignment")
     }
     
-    fmt.println("request split 0: ", request_split[0])
-    switch request_split[0]{
+    switch http_formalia_split[0]{
         case "GET":
             request.request_type = request_type.GET
         case "POST":
@@ -47,7 +47,20 @@ read_request :: proc(buffer : []byte) -> (^HTTP_request, bool) {
             request.request_type = request_type.PUT
     }
     // Get route
-    request.route = strings.clone(request_split[1])    
+    request.route = strings.clone(http_formalia_split[1])
+    // Formalia done
+    delete(http_formalia_split)
+  
+    // Get headers
+    for header_index : int = 3 ; split_request[header_index] == ""; header_index += 1 {
+        split_string, err := strings.split(split_request[header_index], ":")
+        if err == nil do request.headers[split_string[0]] = split_string[1]
+        delete(split_string)
+    }
+    // Get body
+    request.body = split_request[len(split_request) - 1]
+    delete(split_request)
+
     return request, true
 }
 
@@ -61,6 +74,7 @@ main :: proc() {
         return
     }
     fmt.println("Socket is up and running on", IP, "waiting for connections")
+    buffer := make([]byte, 1024)
     for {
         client_sock, client_endpoint, errc := accept_tcp(sock)
         if errc != nil{
@@ -68,17 +82,15 @@ main :: proc() {
             continue
         }
         fmt.println("Accepted connection from ", client_endpoint)
-        buffer := make([]byte, 1024)
         bytes_read : int
         bytes_read ,_  = recv_tcp(client_sock, buffer)
         parsed, _ := read_request(buffer[:bytes_read])
-        fmt.println("Request:", parsed.request_type,parsed.route,)
+        fmt.println("Request:", parsed.request_type,parsed.route, parsed.headers, parsed.body)
         response := transmute([]u8)string("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nHello, world!")
         written, _ := send_tcp(client_sock, response)
         fmt.println("response sent, wrote", written, "bytes")
         close(client_sock)
-        delete(response)
-        delete(buffer)
     }
+    delete(buffer)
 
 }
