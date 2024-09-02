@@ -1,7 +1,8 @@
-*Handle different requests
-*Handle headers - done
 *Send different responses - done
+*Handle headers - done
+*Handle different requests
 *Customizable endpoints
+*Endpoints for stuff in www generates automaticly
 *make routing os-indepentendt
 *research vulnerabilities in code
 *research multi threadding
