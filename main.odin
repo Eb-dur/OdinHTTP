@@ -6,7 +6,9 @@ import "core:strings"
 import "core:encoding/json"
 import "core:os"
 
-DEBUG :: false
+WEB_ROOT :: "./www/"
+
+DEBUG :: true
 IP :: "127.0.0.1:4040"
 request_type :: enum {
     GET,
@@ -95,7 +97,7 @@ read_request :: proc(buffer : []byte) -> (^HTTP_request, bool) {
 
 generate_response :: proc(code : int = 200, return_type_wanted : return_type = nil, data : []u8 = nil) -> [dynamic]u8 {
     text : strings.Builder
-    response : []u8
+    type := http_content_type_text(return_type_wanted)
     reason_phrase := http_response_text(code)
     
     strings.write_string(&text, "HTTP/1.1 ")
@@ -105,7 +107,6 @@ generate_response :: proc(code : int = 200, return_type_wanted : return_type = n
 
     //Here we do content type
     strings.write_string(&text, "Content-Type: ")
-    type := http_content_type_text(return_type_wanted)
     strings.write_string(&text, type)
     strings.write_string(&text, "\r\n")
 
@@ -124,9 +125,24 @@ generate_response :: proc(code : int = 200, return_type_wanted : return_type = n
 }
 
 
-generate_response_data :: proc(route : string, routes,^map[string]string) -> '[]u8{
+generate_response_data :: proc(route : string, routes : ^map[string]string) -> []u8{
+    if !(route in routes){
+        return nil
+    }
+    file_to_deliver := routes[route]
     
+    path : strings.Builder
+    defer strings.builder_destroy(&path)
+
+    strings.write_string(&path, WEB_ROOT)
+    strings.write_string(&path, file_to_deliver)
+    // Is this a security issue? -probably
+    data, succ := os.read_entire_file_from_filename(strings.to_string(path))
+
+    return data if succ else nil
+
 }
+
 
 main :: proc() {
     using net
@@ -155,8 +171,10 @@ main :: proc() {
         bytes_read : int
         bytes_read ,_  = recv_tcp(client_sock, buffer[:])
         parsed, _ := read_request(buffer[:bytes_read])
+        data := generate_response_data(parsed.route, &routings)
+        defer delete(data)
         if DEBUG do fmt.println("Request:", parsed.request_type,parsed.route, parsed.headers, parsed.body)
-        response := generate_response()
+        response := generate_response(200, return_type.HTML,data)
         written, _ := send_tcp(client_sock, response[:])
         if DEBUG do fmt.println("response sent, wrote", written, "bytes")
         delete(response)

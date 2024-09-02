@@ -2,4 +2,6 @@
 *Handle headers - done
 *Send different responses - done
 *Customizable endpoints
+*make routing os-indepentendt
+*research vulnerabilities in code
 *research multi threadding
