@@ -16,7 +16,7 @@ request_type :: enum {
     PUT,
 }
 
-return_type :: enum {
+response_type :: enum {
     PLAIN,
     HTML,
     JSON,
@@ -34,7 +34,7 @@ HTTP_request :: struct {
     request_type : request_type,
     route : string,
     headers : map[string]string,
-    body : string, // May be needed
+    body : string,
 }
 
 parse_routes :: proc(routing_map : ^map[string]string) {
@@ -95,9 +95,9 @@ read_request :: proc(buffer : []byte) -> (^HTTP_request, bool) {
     return request, true
 }
 
-generate_response :: proc(code : int = 200, return_type_wanted : return_type = nil, data : []u8 = nil) -> [dynamic]u8 {
+generate_response :: proc(code : int = 200, response_type_wanted : response_type = nil, data : []u8 = nil) -> [dynamic]u8 {
     text : strings.Builder
-    type := http_content_type_text(return_type_wanted)
+    type := http_content_type_text(response_type_wanted)
     reason_phrase := http_response_text(code)
     
     strings.write_string(&text, "HTTP/1.1 ")
@@ -125,9 +125,9 @@ generate_response :: proc(code : int = 200, return_type_wanted : return_type = n
 }
 
 
-generate_response_data :: proc(route : string, routes : ^map[string]string) -> []u8{
+generate_response_data :: proc(route : string, routes : ^map[string]string) -> ([]u8, response_type){
     if !(route in routes){
-        return nil
+        return nil, nil
     }
     file_to_deliver := routes[route]
     
@@ -138,11 +138,65 @@ generate_response_data :: proc(route : string, routes : ^map[string]string) -> [
     strings.write_string(&path, file_to_deliver)
     // Is this a security issue? -probably
     data, succ := os.read_entire_file_from_filename(strings.to_string(path))
+    wanted_response_type := http_figure_out_response_type(file_to_deliver)
 
-    return data if succ else nil
-
+    if !succ || wanted_response_type == nil do return nil,nil
+    
+    return data,wanted_response_type
 }
 
+worker :: proc(socket : net.TCP_Socket, routings : ^map[string]string){
+    did_i_fail := false
+    buffer : [1024]byte
+
+    data : []u8
+    defer delete(data)
+
+    response_type_wanted : response_type
+
+    client_sock, client_endpoint, errc := net.accept_tcp(socket)
+    defer net.close(client_sock)
+
+    if errc != nil{
+        if DEBUG do fmt.println("Failed to accept connection")
+        return
+    }
+
+    if DEBUG do fmt.println("Accepted connection from ", client_endpoint)
+    
+    bytes_read : int
+    recieve_error : net.Network_Error
+    bytes_read ,recieve_error = net.recv_tcp(client_sock, buffer[:])
+    fmt.println(string(buffer[:bytes_read]))
+    if recieve_error != nil {
+        if DEBUG do fmt.println("Could not recieve tcp data, network error")
+        return
+    }
+    
+    if DEBUG do fmt.println("Request:", buffer)
+    parsed, succ := read_request(buffer[:bytes_read])
+    
+    if !succ{
+        if DEBUG do fmt.println("Could not read request, error")
+        did_i_fail = true
+    }
+    
+    if !did_i_fail{
+        data, response_type_wanted = generate_response_data(parsed.route, routings)
+        fmt.println("I am returning this type ", response_type_wanted)
+        if data == nil || response_type_wanted == nil do did_i_fail = true
+    }
+    response : [dynamic]u8
+    defer delete(response)
+    if did_i_fail{
+        response = generate_response(400)
+    }
+    else{
+        response = generate_response(200, response_type_wanted, data)
+    }
+    written, _ := net.send_tcp(client_sock, response[:])
+    if DEBUG do fmt.println("response sent, wrote", written, "bytes")
+}
 
 main :: proc() {
     using net
@@ -160,25 +214,8 @@ main :: proc() {
     }
 
     fmt.println("Socket is up and running on", IP, "waiting for connections")
-    buffer : [1024]byte
     for {
-        client_sock, client_endpoint, errc := accept_tcp(sock)
-        if errc != nil{
-            if DEBUG do fmt.println("Failed to accept connection")
-            continue
-        }
-        if DEBUG do fmt.println("Accepted connection from ", client_endpoint)
-        bytes_read : int
-        bytes_read ,_  = recv_tcp(client_sock, buffer[:])
-        parsed, _ := read_request(buffer[:bytes_read])
-        data := generate_response_data(parsed.route, &routings)
-        defer delete(data)
-        if DEBUG do fmt.println("Request:", parsed.request_type,parsed.route, parsed.headers, parsed.body)
-        response := generate_response(200, return_type.HTML,data)
-        written, _ := send_tcp(client_sock, response[:])
-        if DEBUG do fmt.println("response sent, wrote", written, "bytes")
-        delete(response)
-        close(client_sock)
+        worker(sock, &routings)
     }
 
 

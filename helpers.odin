@@ -1,5 +1,44 @@
 package server
 
+import "core:strings"
+
+
+http_figure_out_response_type :: proc(file_returned : string) -> response_type {
+        if strings.ends_with(file_returned,".html"){
+            return response_type.HTML
+        }
+        else if strings.ends_with(file_returned, ".json") {
+            return response_type.JSON
+        }
+        else if strings.ends_with(file_returned, ".css") {
+            return response_type.CSS
+        }
+        else if strings.ends_with(file_returned, ".js") {
+            return response_type.JAVASCRIPT
+        }
+        else if strings.ends_with(file_returned, ".md") {
+            return response_type.MARKDOWN
+        }
+        else if strings.ends_with(file_returned, ".xml") {
+            return response_type.XML
+        }
+        else if strings.ends_with(file_returned, ".png") {
+            return response_type.PNG
+        }
+        else if strings.ends_with(file_returned, ".jpeg") || strings.ends_with(file_returned, ".jpg") {
+            return response_type.JPEG
+        }
+        else if strings.ends_with(file_returned, ".bin") {
+            return response_type.BINARY
+        }
+        else if strings.ends_with(file_returned, ".ogg") {
+            return response_type.OGG
+        }
+        else{
+            return nil
+        }
+}
+
 http_response_text :: proc(number : int) ->  (text : string) {
     switch number {
         case 200:
@@ -37,29 +76,29 @@ http_response_text :: proc(number : int) ->  (text : string) {
 }
 
 
-http_content_type_text :: proc(type : return_type) -> (text : string){
+http_content_type_text :: proc(type : response_type) -> (text : string){
     switch type {
-        case return_type.OGG:
+        case response_type.OGG:
             text = "audio/ogg"
-        case return_type.HTML:
+        case response_type.HTML:
             text = "text/html"
-        case return_type.JSON:
+        case response_type.JSON:
             text = "application/json"
-        case return_type.XML:
+        case response_type.XML:
             text = "text/xml"
-        case return_type.PNG:
+        case response_type.PNG:
             text = "image/png"
-        case return_type.JPEG:
+        case response_type.JPEG:
             text = "image/jpeg"
-        case return_type.BINARY:
+        case response_type.BINARY:
             text = "application/octet-stream"
-        case return_type.CSS:
+        case response_type.CSS:
             text = "text/css"
-        case return_type.JAVASCRIPT:
+        case response_type.JAVASCRIPT:
             text = "text/javascript"
-        case return_type.MARKDOWN:
+        case response_type.MARKDOWN:
             text = "text/markdown"
-        case return_type.PLAIN:
+        case response_type.PLAIN:
             fallthrough
         case:
             text = "text/plain"
