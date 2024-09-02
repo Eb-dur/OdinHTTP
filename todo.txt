@@ -1,8 +1,8 @@
 *Send different responses - done
 *Handle headers - done
+*make routing os-indepentendt - done ?
+*Endpoints for stuff in www generates automaticly - done
 *Handle different requests
 *Customizable endpoints
-*Endpoints for stuff in www generates automaticly
-*make routing os-indepentendt
 *research vulnerabilities in code
 *research multi threadding
