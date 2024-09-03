@@ -1,11 +1,15 @@
 package server
 
+import "core:os"
 import "core:fmt"
 import "core:net"
+import "core:mem"
+import "core:c/libc"
+import "core:thread"
 import "core:strings"
 import "core:encoding/json"
-import "core:os"
 import "core:path/filepath"
+import "base:runtime"
 
 
 WEB_ROOT :: "./www/"
@@ -37,6 +41,11 @@ HTTP_request :: struct {
     route : string,
     headers : map[string]string,
     body : string,
+}
+
+socket_and_map_bundle :: struct{
+    socket : net.TCP_Socket,
+    routings : ^map[string]string
 }
 
 Walk_Proc :: proc(info: os.File_Info, in_err: os.Errno, user_data: rawptr) -> (err: os.Errno, skip_dir: bool) {
@@ -155,7 +164,6 @@ generate_response :: proc(code : int = 200, response_type_wanted : response_type
 
 }
 
-
 generate_response_data :: proc(route : string, routes : ^map[string]string) -> ([]u8, response_type){
     if !(route in routes){
         return nil, nil
@@ -176,7 +184,12 @@ generate_response_data :: proc(route : string, routes : ^map[string]string) -> (
     return data,wanted_response_type
 }
 
-worker :: proc(socket : net.TCP_Socket, routings : ^map[string]string){
+worker :: proc(data : rawptr){
+    bundle := cast(^socket_and_map_bundle)data
+    defer free(bundle)
+    client_sock := bundle.socket
+    defer net.close(client_sock)
+    routings := bundle.routings 
     did_i_fail := false
     buffer : [1024]byte
 
@@ -184,16 +197,6 @@ worker :: proc(socket : net.TCP_Socket, routings : ^map[string]string){
     defer delete(data)
 
     response_type_wanted : response_type
-
-    client_sock, client_endpoint, errc := net.accept_tcp(socket)
-    defer net.close(client_sock)
-
-    if errc != nil{
-        if DEBUG do fmt.println("Failed to accept connection")
-        return
-    }
-
-    if DEBUG do fmt.println("Accepted connection from ", client_endpoint)
     
     bytes_read : int
     recieve_error : net.Network_Error
@@ -206,6 +209,7 @@ worker :: proc(socket : net.TCP_Socket, routings : ^map[string]string){
     
     if DEBUG do fmt.println("Request:", buffer)
     parsed, succ := read_request(buffer[:bytes_read])
+    defer free(parsed)
     
     if !succ{
         if DEBUG do fmt.println("Could not read request, error")
@@ -227,10 +231,12 @@ worker :: proc(socket : net.TCP_Socket, routings : ^map[string]string){
     }
     written, _ := net.send_tcp(client_sock, response[:])
     if DEBUG do fmt.println("response sent, wrote", written, "bytes")
+
 }
 
 main :: proc() {
     using net
+    
     endpoint, ok := parse_endpoint(IP)
     routings := make(map[string]string)
     defer delete(routings)
@@ -245,9 +251,20 @@ main :: proc() {
     }
 
     fmt.println("Socket is up and running on", IP, "waiting for connections")
+    threads := make([dynamic]^thread.Thread)
     for {
-        worker(sock, &routings)
+        client_sock, client_endpoint, errc := net.accept_tcp(sock)
+        if DEBUG do fmt.println("Accepted connection from ", client_endpoint)
+        if errc != nil{
+            if DEBUG do fmt.println("Failed to accept connection")
+            return
+        }
+        else{
+            if DEBUG do fmt.println("Craeting new thread and responding")
+            bundle := new(socket_and_map_bundle)
+            bundle.socket = client_sock
+            bundle.routings = &routings
+            thread.create_and_start_with_data(bundle,worker,context, thread.Thread_Priority.Normal,true)    
+        }
     }
-
-
 }

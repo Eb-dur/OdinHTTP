@@ -2,7 +2,7 @@
 *Handle headers - done
 *make routing os-indepentendt - done ?
 *Endpoints for stuff in www generates automaticly - done
+*research multi threadding - done
 *Handle different requests
 *Customizable endpoints
 *research vulnerabilities in code
-*research multi threadding
