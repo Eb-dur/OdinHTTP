@@ -57,16 +57,26 @@ Walk_Proc :: proc(info: os.File_Info, in_err: os.Errno, user_data: rawptr) -> (e
 
     if !info.is_dir{
         routing_map := cast(^map[string]string)(user_data)
+
         current_dir := os.get_current_directory()
         defer delete(current_dir)
+
         slice_of_file_route := info.fullpath[len(current_dir) + 4:]
         route, alloc := filepath.to_slash(slice_of_file_route)
-        if !alloc{
-            route = strings.clone(route)
-        }
 
         if route in routing_map^{
             fmt.println("Due to files existing this route is overritten:", route)
+        }
+
+        for key in routing_map{
+            
+            _ , is_ip := net.parse_endpoint(routing_map[key])
+    
+            if is_ip && strings.has_prefix(route, key){
+
+                fmt.println(key, "Will redirect traffic from server and will therefore not serve", route)
+
+            }
         }
 
         (routing_map^)[route] = strings.clone(route)
@@ -77,17 +87,17 @@ Walk_Proc :: proc(info: os.File_Info, in_err: os.Errno, user_data: rawptr) -> (e
 
 parse_routes :: proc(routing_map : ^map[string]string) {
     file_content, success := os.read_entire_file_from_filename("routings.json")
-
+    
     if !success {
         fmt.print("Failed to read routings.json")
         return
     }
-
+    
     if !(json.unmarshal(file_content, routing_map) == nil){
         fmt.print("Failed to unmarshal JSON")
         return
     }
-
+    
     filepath.walk(WEB_ROOT,Walk_Proc, rawptr(routing_map))
 }
 
@@ -100,15 +110,21 @@ read_request :: proc(buffer : []byte) -> (^HTTP_request, bool) {
 
     split_request, err := strings.split(request_string,"\r\n")
     defer delete(split_request)
+    
     if err != nil{
+    
         fmt.println("Error in memory assignment")
+    
     }
     // Get type
     http_formalia := split_request[0]
     http_formalia_split, err2 := strings.split(http_formalia, " ")
     defer delete(http_formalia_split)
+    
     if err2 != nil{
+    
         fmt.println("Error in memory assignment")
+    
     }
     
     switch http_formalia_split[0]{
