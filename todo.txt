@@ -6,5 +6,5 @@
 *Handle different requests - done
 *Customizable endpoints - done
 *implement reverse proxy
-*implement 
+*implement persistent connections
 *research vulnerabilities in code
