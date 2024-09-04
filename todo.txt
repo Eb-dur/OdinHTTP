@@ -3,6 +3,8 @@
 *make routing os-indepentendt - done ?
 *Endpoints for stuff in www generates automaticly - done
 *research multi threadding - done
-*Handle different requests
-*Customizable endpoints
+*Handle different requests - done
+*Customizable endpoints - done
+*implement reverse proxy
+*implement 
 *research vulnerabilities in code
