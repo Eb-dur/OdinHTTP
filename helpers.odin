@@ -1,6 +1,20 @@
 package server
 
 import "core:strings"
+import "core:os"
+import "core:fmt"
+
+
+prepare_data_from_server :: proc (file_to_deliver : string) -> ([]u8, response_type){    
+    path : strings.Builder
+    defer strings.builder_destroy(&path)
+    strings.write_string(&path, WEB_ROOT)
+    strings.write_string(&path, file_to_deliver)
+    // Is this a security issue? -probably
+    data, succ := os.read_entire_file_from_filename(strings.to_string(path))
+    wanted_response_type := http_figure_out_response_type(file_to_deliver)
+    return data, wanted_response_type
+}
 
 
 http_figure_out_response_type :: proc(file_returned : string) -> response_type {

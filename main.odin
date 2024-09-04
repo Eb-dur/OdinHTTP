@@ -12,6 +12,7 @@ import "core:path/filepath"
 import "base:runtime"
 
 
+
 WEB_ROOT :: "./www/"
 
 DEBUG :: true
@@ -164,22 +165,21 @@ generate_response :: proc(code : int = 200, response_type_wanted : response_type
 
 }
 
-generate_response_data :: proc(route : string, routes : ^map[string]string) -> ([]u8, response_type){
-    if !(route in routes){
+generate_response_data :: proc(request : ^HTTP_request, routes : ^map[string]string) -> ([]u8, response_type){
+    if !(request.route in routes){
         return nil, nil
     }
-    file_to_deliver := routes[route]
-    
-    path : strings.Builder
-    defer strings.builder_destroy(&path)
+    fmt.println("Here 1")
+    data : []u8
+    wanted_response_type : response_type
+    thing_routed := routes[request.route]
 
-    strings.write_string(&path, WEB_ROOT)
-    strings.write_string(&path, file_to_deliver)
-    // Is this a security issue? -probably
-    data, succ := os.read_entire_file_from_filename(strings.to_string(path))
-    wanted_response_type := http_figure_out_response_type(file_to_deliver)
+    endpoint, ok := net.parse_endpoint(thing_routed)
 
-    if !succ || wanted_response_type == nil do return nil,nil
+    if ok do data, wanted_response_type = get_data_from_proxy(&endpoint, request)
+    else do data, wanted_response_type = prepare_data_from_server(thing_routed)
+    fmt.println("Here 2")
+    if data == nil || wanted_response_type == nil do return nil,nil
     
     return data,wanted_response_type
 }
@@ -187,8 +187,10 @@ generate_response_data :: proc(route : string, routes : ^map[string]string) -> (
 worker :: proc(data : rawptr){
     bundle := cast(^socket_and_map_bundle)data
     defer free(bundle)
+
     client_sock := bundle.socket
     defer net.close(client_sock)
+    
     routings := bundle.routings 
     did_i_fail := false
     buffer : [1024]byte
@@ -201,37 +203,50 @@ worker :: proc(data : rawptr){
     bytes_read : int
     recieve_error : net.Network_Error
     bytes_read ,recieve_error = net.recv_tcp(client_sock, buffer[:])
-    fmt.println(string(buffer[:bytes_read]))
+    
     if recieve_error != nil {
+    
         if DEBUG do fmt.println("Could not recieve tcp data, network error")
         return
+    
     }
     
     if DEBUG do fmt.println("Request:", buffer)
+    
     parsed, succ := read_request(buffer[:bytes_read])
     defer free(parsed)
     
     if !succ{
+    
         if DEBUG do fmt.println("Could not read request, error")
         did_i_fail = true
+    
     }
     
     if !did_i_fail{
-        data, response_type_wanted = generate_response_data(parsed.route, routings)
+    
+        data, response_type_wanted = generate_response_data(parsed, routings)
         fmt.println("I am returning this type ", response_type_wanted)
         if data == nil || response_type_wanted == nil do did_i_fail = true
+    
     }
+
     response : [dynamic]u8
     defer delete(response)
+    
     if did_i_fail{
+    
         response = generate_response(400)
+    
     }
     else{
+    
         response = generate_response(200, response_type_wanted, data)
+    
     }
+    
     written, _ := net.send_tcp(client_sock, response[:])
     if DEBUG do fmt.println("response sent, wrote", written, "bytes")
-
 }
 
 main :: proc() {
@@ -239,12 +254,14 @@ main :: proc() {
     
     endpoint, ok := parse_endpoint(IP)
     routings := make(map[string]string)
+    
     defer delete(routings)
     parse_routes(&routings)
 
     if DEBUG do fmt.println(routings)
 
     sock, err:= listen_tcp(endpoint,10)
+    
     if err != nil {
         fmt.println("Failed to create socket")
         return
@@ -252,19 +269,30 @@ main :: proc() {
 
     fmt.println("Socket is up and running on", IP, "waiting for connections")
     threads := make([dynamic]^thread.Thread)
+    
+    //Server is upp and will now listen
+
     for {
+        
         client_sock, client_endpoint, errc := net.accept_tcp(sock)
+        
         if DEBUG do fmt.println("Accepted connection from ", client_endpoint)
+        
         if errc != nil{
+        
             if DEBUG do fmt.println("Failed to accept connection")
             return
+        
         }
         else{
+
             if DEBUG do fmt.println("Craeting new thread and responding")
+            
             bundle := new(socket_and_map_bundle)
             bundle.socket = client_sock
             bundle.routings = &routings
             thread.create_and_start_with_data(bundle,worker,context, thread.Thread_Priority.Normal,true)    
+        
         }
     }
 }
