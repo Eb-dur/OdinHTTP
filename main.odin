@@ -50,9 +50,12 @@ socket_and_map_bundle :: struct{
 }
 
 Walk_Proc :: proc(info: os.File_Info, in_err: os.Errno, user_data: rawptr) -> (err: os.Errno, skip_dir: bool) {
+    
     if in_err != 0 {
+
         fmt.println("Error:", in_err)
         return in_err, false
+    
     }
 
     if !info.is_dir{
@@ -65,7 +68,9 @@ Walk_Proc :: proc(info: os.File_Info, in_err: os.Errno, user_data: rawptr) -> (e
         route, alloc := filepath.to_slash(slice_of_file_route)
 
         if route in routing_map^{
+
             fmt.println("Due to files existing this route is overritten:", route)
+        
         }
 
         for key in routing_map{
@@ -128,12 +133,14 @@ read_request :: proc(buffer : []byte) -> (^HTTP_request, bool) {
     }
     
     switch http_formalia_split[0]{
+
         case "GET":
             request.request_type = request_type.GET
         case "POST":
             request.request_type = request_type.POST
         case "PUT":
             request.request_type = request_type.PUT
+    
     }
     // Get route
     request.route = strings.clone(http_formalia_split[1])
@@ -154,10 +161,10 @@ read_request :: proc(buffer : []byte) -> (^HTTP_request, bool) {
 
 generate_response :: proc(code : int = 200, response_type_wanted : response_type = nil, data : []u8 = nil) -> [dynamic]u8 {
     text : strings.Builder
-    type := http_content_type_text(response_type_wanted)
-    reason_phrase := http_response_text(code)
+    type := content_type_text(response_type_wanted)
+    reason_phrase := response_text(code)
     
-    strings.write_string(&text, "HTTP/1.1 ")
+    strings.write_string(&text, "HTTP/1 ")
     strings.write_int(&text, code)
     strings.write_string(&text,reason_phrase)
     strings.write_string(&text, "\r\n")
@@ -167,17 +174,17 @@ generate_response :: proc(code : int = 200, response_type_wanted : response_type
     strings.write_string(&text, type)
     strings.write_string(&text, "\r\n")
 
-   //Here we do len
-   strings.write_string(&text, "Content-Lenght: ")
-   strings.write_int(&text, len(data) if data != nil else 0)
-   strings.write_string(&text, "\r\n")
-   strings.write_string(&text, "\r\n")
+    //Here we do len
+    strings.write_string(&text, "Content-Lenght: ")
+    strings.write_int(&text, len(data) if data != nil else 0)
+    strings.write_string(&text, "\r\n")
+    strings.write_string(&text, "\r\n")
 
-   //Here we do data
+    //Here we do data
 
-   strings.write_bytes(&text, data)
+    strings.write_bytes(&text, data)
 
-   return text.buf
+    return text.buf
 
 }
 

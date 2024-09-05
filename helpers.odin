@@ -12,12 +12,12 @@ prepare_data_from_server :: proc (file_to_deliver : string) -> ([]u8, response_t
     strings.write_string(&path, file_to_deliver)
     // Is this a security issue? -probably
     data, succ := os.read_entire_file_from_filename(strings.to_string(path))
-    wanted_response_type := http_figure_out_response_type(file_to_deliver)
+    wanted_response_type := figure_out_response_type(file_to_deliver)
     return data, wanted_response_type
 }
 
 
-http_figure_out_response_type :: proc(file_returned : string) -> response_type {
+figure_out_response_type :: proc(file_returned : string) -> response_type {
         if strings.ends_with(file_returned,".html"){
             return response_type.HTML
         }
@@ -53,7 +53,7 @@ http_figure_out_response_type :: proc(file_returned : string) -> response_type {
         }
 }
 
-http_response_text :: proc(number : int) ->  (text : string) {
+response_text :: proc(number : int) ->  (text : string) {
     switch number {
         case 200:
             text = " OK"
@@ -90,7 +90,7 @@ http_response_text :: proc(number : int) ->  (text : string) {
 }
 
 
-http_content_type_text :: proc(type : response_type) -> (text : string){
+content_type_text :: proc(type : response_type) -> (text : string){
     switch type {
         case response_type.OGG:
             text = "audio/ogg"
