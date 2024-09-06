@@ -216,6 +216,7 @@ worker :: proc(data : rawptr){
     }
     else{
         append(&response, ..data[:])
+        //delete(data)
     }
     
     written, _ := net.send_tcp(client_sock, response[:])

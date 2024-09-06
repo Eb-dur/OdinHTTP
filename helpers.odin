@@ -127,7 +127,7 @@ generate_response :: proc(code : int = 200, response_type_wanted : response_type
     type := content_type_text(response_type_wanted)
     reason_phrase := response_text(code)
     
-    strings.write_string(&text, "HTTP/1 ")
+    strings.write_string(&text, "HTTP/1.1 ")
     strings.write_int(&text, code)
     strings.write_string(&text,reason_phrase)
     strings.write_string(&text, "\r\n")
@@ -158,9 +158,11 @@ get_data_from_proxy :: proc(endpoint : net.Endpoint, request : ^HTTP_request) ->
     )
     strings.write_string(&datastring, request.request_type)
     strings.write_rune(&datastring, ' ')
-    strings.write_string(&datastring, request.route)
+    //chop route
+    chop_index := strings.index(request.route[1:],"/")
+    strings.write_string(&datastring, request.route[chop_index + 1:])
     strings.write_rune(&datastring ,' ')
-    strings.write_string(&datastring, "HTTP/1\r\n")
+    strings.write_string(&datastring, "HTTP/1.1\r\n")
     // Now we add headers
     for header in request.headers{
         strings.write_string(&datastring,header)
@@ -173,7 +175,7 @@ get_data_from_proxy :: proc(endpoint : net.Endpoint, request : ^HTTP_request) ->
 
     next_server, dial_error := net.dial_tcp_from_endpoint(endpoint)
     if dial_error != nil do return nil,nil
-    
+
     return_data := make([]u8,BUFFER_SIZE)
 
     bytes_written,send_error := net.send_tcp(next_server,datastring.buf[:])
@@ -190,7 +192,6 @@ generate_response_data :: proc(request : ^HTTP_request, routes : ^map[string]str
     if !(request.route in routes){
         return nil, nil
     }
-    fmt.println("Here 1")
     data : []u8
     wanted_response_type : response_type
     thing_routed := routes[request.route]
@@ -199,7 +200,6 @@ generate_response_data :: proc(request : ^HTTP_request, routes : ^map[string]str
 
     if ok do data, wanted_response_type = get_data_from_proxy(endpoint, request)
     else do data, wanted_response_type = prepare_data_from_server(thing_routed)
-    fmt.println("Here 2")
     if data == nil || wanted_response_type == nil do return nil,nil
     
     return data,wanted_response_type
