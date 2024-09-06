@@ -17,11 +17,14 @@ WEB_ROOT :: "./www/"
 
 DEBUG :: true
 IP :: "127.0.0.1:4040"
+BUFFER_SIZE :: 1024
+/*
 request_type :: enum {
     GET,
     POST,
     PUT,
 }
+*/
 
 response_type :: enum {
     PLAIN,
@@ -35,10 +38,11 @@ response_type :: enum {
     JPEG,
     BINARY,
     OGG,
+    WHOLE_REQUEST
 }
 
 HTTP_request :: struct {
-    request_type : request_type,
+    request_type : string,
     route : string,
     headers : map[string]string,
     body : string,
@@ -132,21 +136,11 @@ read_request :: proc(buffer : []byte) -> (^HTTP_request, bool) {
     
     }
     
-    switch http_formalia_split[0]{
-
-        case "GET":
-            request.request_type = request_type.GET
-        case "POST":
-            request.request_type = request_type.POST
-        case "PUT":
-            request.request_type = request_type.PUT
-    
-    }
+    request.request_type = http_formalia_split[0]
     // Get route
     request.route = strings.clone(http_formalia_split[1])
     // Formalia done
 
-  
     // Get headers
     for header_index : int = 3 ; split_request[header_index] == ""; header_index += 1 {
         split_string, err := strings.split(split_request[header_index], ":")
@@ -159,53 +153,6 @@ read_request :: proc(buffer : []byte) -> (^HTTP_request, bool) {
     return request, true
 }
 
-generate_response :: proc(code : int = 200, response_type_wanted : response_type = nil, data : []u8 = nil) -> [dynamic]u8 {
-    text : strings.Builder
-    type := content_type_text(response_type_wanted)
-    reason_phrase := response_text(code)
-    
-    strings.write_string(&text, "HTTP/1 ")
-    strings.write_int(&text, code)
-    strings.write_string(&text,reason_phrase)
-    strings.write_string(&text, "\r\n")
-
-    //Here we do content type
-    strings.write_string(&text, "Content-Type: ")
-    strings.write_string(&text, type)
-    strings.write_string(&text, "\r\n")
-
-    //Here we do len
-    strings.write_string(&text, "Content-Lenght: ")
-    strings.write_int(&text, len(data) if data != nil else 0)
-    strings.write_string(&text, "\r\n")
-    strings.write_string(&text, "\r\n")
-
-    //Here we do data
-
-    strings.write_bytes(&text, data)
-
-    return text.buf
-
-}
-
-generate_response_data :: proc(request : ^HTTP_request, routes : ^map[string]string) -> ([]u8, response_type){
-    if !(request.route in routes){
-        return nil, nil
-    }
-    fmt.println("Here 1")
-    data : []u8
-    wanted_response_type : response_type
-    thing_routed := routes[request.route]
-
-    endpoint, ok := net.parse_endpoint(thing_routed)
-
-    if ok do data, wanted_response_type = get_data_from_proxy(&endpoint, request)
-    else do data, wanted_response_type = prepare_data_from_server(thing_routed)
-    fmt.println("Here 2")
-    if data == nil || wanted_response_type == nil do return nil,nil
-    
-    return data,wanted_response_type
-}
 
 worker :: proc(data : rawptr){
     bundle := cast(^socket_and_map_bundle)data
@@ -216,7 +163,7 @@ worker :: proc(data : rawptr){
     
     routings := bundle.routings 
     did_i_fail := false
-    buffer : [1024]byte
+    buffer : [BUFFER_SIZE]byte
 
     data : []u8
     defer delete(data)
@@ -262,10 +209,13 @@ worker :: proc(data : rawptr){
         response = generate_response(400)
     
     }
-    else{
-    
+    else if response_type_wanted != response_type.WHOLE_REQUEST{
+
         response = generate_response(200, response_type_wanted, data)
     
+    }
+    else{
+        append(&response, ..data[:])
     }
     
     written, _ := net.send_tcp(client_sock, response[:])
@@ -286,8 +236,10 @@ main :: proc() {
     sock, err:= listen_tcp(endpoint,10)
     
     if err != nil {
+
         fmt.println("Failed to create socket")
         return
+
     }
 
     fmt.println("Socket is up and running on", IP, "waiting for connections")
@@ -314,7 +266,7 @@ main :: proc() {
             bundle := new(socket_and_map_bundle)
             bundle.socket = client_sock
             bundle.routings = &routings
-            thread.create_and_start_with_data(bundle,worker,context, thread.Thread_Priority.Normal,true)    
+            thread.create_and_start_with_data(bundle,worker,context, thread.Thread_Priority.Normal,true)
         
         }
     }
